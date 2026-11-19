@@ -1,0 +1,23 @@
+# Generated trajectories and exports (kept locally)
+/results/
+
+# MATLAB generated files
+*.asv
+*.autosave
+*.m~
+slprj/
+codegen/
+*.slxc
+
+# Test outputs; keep test source and manual checklist
+/tests/*.mat
+/tests/*.json
+/tests/*.log
+/tests/*.png
+/tests/edited_config.json
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "character": "一",
+  "squareSizeMm": 63,
+  "marginMm": 0,
+  "Ts": 0.001,
+  "writeSpeed": 20,
+  "travelSpeed": 40,
+  "verticalSpeed": 10,
+  "cartAcceleration": 50,
+  "verticalAcceleration": 20,
+  "liftHeight": 10,
+  "maxDepth": 11,
+  "depthProgress": [
+    0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    1
+  ],
+  "depthDefault": [
+    0,
+    0.8,
+    1.2,
+    1.2,
+    0.6,
+    0
+  ],
+  "depthProfiles": {
+    "stroke1": [
+      [
+        0,
+        0
+      ],
+      [
+        0.2,
+        0.8
+      ],
+      [
+        0.3986241610738257,
+        1.6680429864253419
+      ],
+      [
+        0.60256152125279661,
+        1.7539027149321285
+      ],
+      [
+        0.8,
+        0.6
+      ],
+      [
+        1,
+        0
+      ]
+    ]
+  },
+  "paperOrigin": [
+    370,
+    -0,
+    590
+  ],
+  "paperRpyDeg": [
+    0,
+    0,
+    0
+  ],
+  "brushRpyDeg": [
+    180,
+    0,
+    0
+  ],
+  "toolOffsetMm": [
+    0,
+    0,
+    0
+  ],
+  "toolRpyDeg": [
+    0,
+    0,
+    0
+  ],
+  "qSeedDeg": [
+    0,
+    -20,
+    120,
+    0,
+    80,
+    0
+  ],
+  "jointSpeedDeg": [
+    180,
+    180,
+    180,
+    180,
+    180,
+    180
+  ],
+  "jointAccelDeg": [
+    36,
+    36,
+    36,
+    36,
+    36,
+    36
+  ],
+  "jointLimitsDeg": [
+    [
+      -170,
+      170
+    ],
+    [
+      -120,
+      120
+    ],
+    [
+      -140,
+      140
+    ],
+    [
+      -170,
+      170
+    ],
+    [
+      -120,
+      120
+    ],
+    [
+      -360,
+      360
+    ]
+  ],
+  "calibrated": 1,
+  "geometryToleranceMm": 0.001,
+  "maxSamples": 1.0E+6,
+  "maxTimeScalingIterations": 6
+}

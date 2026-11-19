@@ -1,0 +1,158 @@
+# 机械臂毛笔书写（基于实验四）
+
+在 MATLAB R2024a 中将当前文件夹切换到本目录，输入：
+
+```matlab
+calligraphy_app
+```
+
+界面默认打开“人”，文字输入框可输入多个连续汉字，例如“机器人学”。默认横排，每行最多 3 字，单字字框 100×100 mm，字框边缘间距与行间距均为 30 mm，中心间距为 130 mm；第 4 字自动换到下一行，末行从左侧开始排列。右侧可直接修改“每行字数（横排）”“字框/行间距 mm”“单字字框边长 mm”。首版不接受空格或手工换行。
+
+先选“当前字”，再用笔画下拉框选择该字的笔画。每个字符位置独立保存六点提按，重复字也可不同；“提按复制到同字”会将当前字所有笔画的设置复制到本段文字中其他相同汉字。橙色六点可以拖动：首尾进度固定，中间四点可以左右和上下拖动；也可以直接编辑右侧表格。进度是**本笔累计弧长百分比**，不是时间百分比。下压深度单位 mm，零表示未受压笔尖刚接触纸面，正值表示继续下压。
+
+`paperOrigin` 是整段排版外框的中心；单字时仍为单字框中心。默认纸面朝向下，横向从左到右沿基坐标 +Y，换行向字的下方沿基坐标 +X。例如四字排版的纸面中心坐标依次为 `[-130,65]`、`[0,65]`、`[130,65]`、`[-130,-65]` mm；外框为 360×230 mm。程序逐字、逐笔书写，字间抬笔空移，整段只在开始和结束经过一次安全点。输入改为不同文字时会重置全部六点配置；仅调整间距、行字数或尺寸时保留逐笔配置。保存 JSON 时文字、排版和全部深度点一起保存。
+
+```matlab
+cfg = calligraphy_config('机器人学');
+cfg.charactersPerRow = 3;
+cfg.squareSizeMm = 100;
+cfg.characterGapMm = 30;
+calligraphy_app(cfg)
+% 命令行生成：
+% result = plan_calligraphy(cfg);
+% export_calligraphy(result);
+```
+
+修改后点击“生成轨迹并检查”，检查通过后点击“导出 TXT / MAT”。修改任何参数会使旧结果失效。生成过程中执行逐点逆解，可能需要几十秒到数分钟；状态栏显示进度。三维回放从关节正解重建笔尖位置，播放速度仅用于展示，不是控制器执行速度。
+
+生成检查通过后，会另开“六轴关节速度”窗口，用 3×2 子图分别显示 J1～J6 的规划角速度（deg/s），标题显示速度绝对峰值和配置上限；竖虚线标出后续各笔落笔阶段的起始时刻。修改规划参数时该窗口关闭，重新生成后显示新结果。也可以直接查看已有结果：
+
+```matlab
+plot_calligraphy_joint_velocity(result)
+% 或读取已导出的 MAT 文件：
+plot_calligraphy_joint_velocity('results/U06C38/calligraphy_trajectory.mat')
+```
+
+这些曲线表示规划速度，并非仿真或实机传感器测量速度；加载旧 MAT 时显示的是该文件当时保存的轨迹。
+
+生成轨迹后也会打开“六轴关节加速度”窗口，3×2 子图分别展示 J1～J6 的规划角加速度（deg/s²），并标注绝对峰值和配置上限。数据来自已验证关节轨迹的 `qdd` 数值微分结果，不是实机传感器测量。参数变化后旧窗口自动关闭。也可执行 `plot_calligraphy_joint_acceleration(result)`，或 `plot_calligraphy_joint_acceleration('results/U04EBA/calligraphy_trajectory.mat')` 单独查看；图窗工具栏可保存图片。
+
+生成后还会打开“末端笔尖速度”窗口：上图显示基坐标系下 Vx、Vy、Vz，下图显示实际规划合速度、设定的阶段速度上限，以及绿色虚线表示的路径节点限速参考，单位均为 mm/s。节点参考综合曲率、提按和关节约束，但尚需满足前后加减速距离，不是保证能达到的目标速度，也不是连续区间严格上界。该末端指毛笔笔尖 TCP；曲线覆盖落笔、书写、抬笔和空移。也可单独执行 `plot_calligraphy_end_velocity(result)`，或传入 `results/U06C38/calligraphy_trajectory.mat` 等 MAT 文件路径。图窗工具栏可保存图片。
+
+## 输出点位文件
+
+单字结果目录沿用 `results/Uxxxxx/`，以汉字 Unicode 编码命名（“一” U04E00，“人” U04EBA，“永” U06C38）。多字使用整段独立目录 `results/TEXT_Uxxxxx_Uxxxxx_.../`，例如“人人人人”为 `results/TEXT_U04EBA_U04EBA_U04EBA_U04EBA/`。较长文字改用文本 SHA-256 摘要作为目录名，完整内容在 config.json 和 validation.json 中。同一段文字再次导出会覆盖同目录结果。
+
+| 文件 | 内容 |
+|---|---|
+| `calligraphy_joint_points.txt` | 每行六个关节角 q1…q6，单位 degree |
+| `calligraphy_cartesian_points.txt` | 每行笔尖 TCP 的 X Y Z Rx Ry Rz，单位 mm、degree |
+| `calligraphy_model_end_points.txt` | 每行实验四原模型末端的 X Y Z Rx Ry Rz，便于核对工具偏移 |
+| `point_file_info.txt` | 采样周期、点数、时长、单位、TCP 说明和标定状态 |
+| `calligraphy_timed_trajectory.csv` | 时间、笔尖坐标、关节角/速度/加速度、笔画号、阶段、进度和深度 |
+| `calligraphy_trajectory.mat` | 完整 result 及 Simulink 用的 t、q、qd、qdd（rad 制） |
+| `config.json` / `validation.json` | 逐笔六点及物理配置 / 检查结果及数据版本 |
+
+TXT 与实验四保持**无表头、空格分隔、每行六列**的形式。完整轨迹包含落笔、书写、抬笔和笔间移动。RPY 约定为 `R = Rz(rz)*Ry(ry)*Rx(rx)`。
+
+多字仍导出一套连续的 TXT/CSV/MAT 文件。CSV 的 `stroke_id` 是全段全局笔画号，新增 `character_index`（字符位置，从 1 开始）、`character`（汉字）、`local_stroke_id`（字内笔画号）；安全进出段编号为 0，汉字列为空，字间空移归属下一字/笔。三维预览标出各字字框，笔画起点标注为“字符位置.字内笔画号”。不可达和逆解跳变会报告具体字符位置及字内笔画，不跳过失败字继续导出。
+
+多字功能的必要验证入口为 `addpath('tests'); test_multi_character`，以“人人人人”检查三字换行、重复字独立提按/复制、JSON 保存重载、安全首尾、完整运动学与文件导出。该案例已通过，结果为 110845 点、110.844 s，未启动仿真；报告见 `tests/multi_character_report.json`，界面预览见 `tests/multi_character_preview.png`。`test_multi_character(true)` 可复核已保存的该案例结果，避免重复生成完整轨迹。导出 CSV 使用 UTF-8；MATLAB 读取时若首段安全运动的汉字列为空导致自动推断为数字，可用 `setvartype(options,'character','string')` 指定该列类型。
+
+TXT 本身没有时间列，控制器必须按 `point_file_info.txt` 中的 Ts 执行。若控制器再次平滑或重规划，不保证保留本程序的时间律。笛卡尔主文件代表**毛笔笔尖 TCP**，控制器的工具坐标设置必须与配置一致；不能重复补偿偏移。原模型末端点位另存为 `calligraphy_model_end_points.txt`。
+
+轨迹第一点和最后一点是同一安全点，笔尖基坐标为 `[370, 0, cfg.paperOrigin(3)+100]` mm。X/Y 固定为 370/0，不跟随字框中心 X/Y；Z 每次生成时从纸面中心高度自动计算，沿基坐标 +Z 增加 100 mm（不是沿倾斜纸面的法向）。例如纸面高度 520 mm，安全点为 `[370 0 620]`。开始时先在该高度水平移至第一笔上方，再垂直下降到落笔准备位置；结束时末笔抬起后先垂直升到该高度，再水平返回安全点。六点深度设置仍只作用于各笔书写。安全进出段在 CSV 中使用 `stroke_id=0`，阶段为 `safe_travel`、`safe_lower`、`safe_lift`。三维预览标记安全点；TXT、CSV、MAT 与仿真输入均包含这段往返运动。
+
+**不包含从实机当前姿态到安全起点的接近运动**；执行前应先将实际笔尖置于首点对应的位姿。`qSeedDeg` 仅用于选择逆解分支。安全点名称表示规划入口，不代表已经验证现场障碍碰撞；若纸面大幅倾斜或改变工作区，仍需核对这段路径。
+
+## 轨迹方法与边界
+
+- 从 `data/hanzivg.xml` 读取按笔顺排列的原始三次 Bézier 中心线。针对该固定格式提取 `kanji` 和 `path`，兼容文件中的未声明 `kvg:` 前缀；不执行文件中的任何指令。
+- 翻转数据 Y 轴，求 Bézier 曲线极值的整字包围盒，统一等比缩放和居中。字框边长由 `squareSizeMm` 设置，也可在 App 的“字框边长 mm”修改；边距由 `marginMm` 设置。标题、字框和轨迹同步更新，修改后需要重新生成和导出。单方向字形也能处理。实际墨迹宽度不包括在此边界中。
+- 默认 `paperOrigin=[370 0 590]` mm，`paperRpyDeg=[0 0 90]`：字的右方对应基坐标 +Y，字的下方对应基坐标 +X，抬笔对应 +Z。默认水平纸面下，`X_base=370-y_paper`、`Y_base=x_paper`，刚接触纸面时 `Z_base=590` mm。笔顺和每笔起止方向保持字库定义。界面绘图仍按纸面坐标显示正向汉字。
+- 修改默认朝向后，需要重新打开编辑器并生成、导出轨迹。已经打开的界面、已保存的 JSON/MAT 和旧 TXT 不会自动改变朝向；读取旧配置时请将“纸面姿态 RPY deg”改为 `0 0 90` 后重新生成。
+- 每笔的弧长进度采用分段五次 Hermite 时间律，内部节点具有非零速度，位置、速度、加速度连续；特殊边界条件下最高次系数可能为零。因此五次的是弧长进度，X(t)、Y(t) 本身一般不是五次。笔内不因原始 C 段边界归零，只有笔画及落笔/抬笔/空移阶段端点零速。
+- 原字库坐标经舍入，段间切向/曲率不保证连续。连续版在原路径附近拟合 C2 三次样条，并以 `strokeSmoothingToleranceMm`（默认 0.05 mm）约束同参数采样检查的平滑偏差。锐角、折钩会产生微小圆滑，不再严格经过全部原始路径点；这是连续非零速度通过尖角所需的几何调整。容差是离散检查值，不是全区间严格误差证明。若平滑后极值超出字框，整字统一等比缩小到字框内，缩放比例保存在 `smoothingFitScale`；该缩放带来的额外位移不计入平滑容差。
+- 六点深度使用分段五次平滑插值，每点的深度一、二阶导数为零，无相邻点间过冲。固定进度深度不随书写时长变化。
+- 纸面位置 `p_paper=[x,y,-d]` 经纸面旋转和平移映射到基坐标系，深度始终沿纸面法向。毛笔姿态相对纸面固定。
+- 沿每段路径建立节点，急弯区域额外包含样条结点及四分点。利用三维路径导数和节点逆解的弧长导数，构造末端速度、曲率加速度、纸面法向提按、关节速度与加速度的局部速度包络。给曲率与切向加速度各预留 35% 的约束预算，其余用于离散误差及插值裕量。通过前向/反向传播为急弯提前减速、出弯后恢复，避免一个急弯拖慢整笔。该方法是保守的局部可行调速，不保证全局时间最优或处处达到设定速度。
+- 密集路径节点仍用于建立约束，但根据速度/加速度包络变化删减冗余时间节点：包络对数插值偏差阈值为 0.025，平缓区节点间距不超过约 1 mm，保留急弯限速特征；切向加速度限制取原区间最小值。
+- 时间节点间采用共享加速度的五次 Hermite 多项式。固定节点位置、速度、时长后，通过稀疏系统最小化进度 jerk 平方积分，获得内部节点加速度；起止、匀速段及速度极值点保留必要的零加速度，其余节点不再一律归零。随后按单调性和加速度上限约束裁剪，并检查多项式内部极值，必要时仅回退问题节点。这是带可行性修正的平滑方法，不保证修正后仍为严格的最小 jerk 解，也不等于增加了硬 jerk 上限。
+- 每个阶段总时长对齐 Ts，按固定周期重新从原几何采样并逐点逆解。若复核超限，只降低相关节点及相邻节点的速度并重新传播，不再统一延长整笔。设置的速度仍是上限，短笔画或受加速度限制时可能达不到。
+- 连续选解考虑合法的 2π 等价角及实际关节行程。奇异点、无解、明显分支跳变或超限会报错，不导出新的“检查通过”结果。
+- 关节速度/加速度由等间隔关节轨迹数值微分得到；检查是离散采样级检查，不代表连续区间的严格数学界限。
+
+## 需要补充的物理参数
+
+界面右侧可编辑常用参数；六轴角度限位等完整配置可在 `calligraphy_config.m` 或保存的 JSON 中修改。
+
+| 参数 | 测量/确认方式 |
+|---|---|
+| `paperOrigin` | 整段排版外框中心相对机器人基坐标的 XYZ，mm |
+| `charactersPerRow`、`characterGapMm` | 横排每行字数、字框边缘/行间距，默认 3 和 30 mm |
+| `paperRpyDeg` | 纸面 X/Y 方向和法向；可通过三个不共线标定点计算 |
+| `toolOffsetMm`、`toolRpyDeg` | 实验四原模型末端坐标系到未受压笔尖坐标系的刚体变换 |
+| `brushRpyDeg` | 笔尖坐标系相对纸面的固定书写姿态，默认笔杆向下 |
+| 接触零点 | 当前装夹、纸张和垫板下，笔尖刚接触纸面的位置，体现在纸面与 TCP 标定中 |
+| `maxDepth`、每笔六点 | 最大允许下压量和各位置提按深度，mm |
+| `writeSpeed`、`travelSpeed`、`verticalSpeed` | 书写、空移、提按速度上限，mm/s |
+| `cartAcceleration`、`verticalAcceleration` | 笛卡尔及纸面法向加速度上限，mm/s² |
+| `liftHeight` | 离纸空移高度，mm |
+| `jointLimitsDeg`、`jointSpeedDeg`、`jointAccelDeg` | 每轴实际角度范围、速度和加速度上限；确认与 HL-0905 一致 |
+| `Ts` | 控制器实际插补周期、是否支持按固定周期回放点位 |
+| 初始位置和环境 | 实机如何到达第一点、夹具和周围障碍；本程序没有完整碰撞模型 |
+| 控制器格式 | 点位单位、TCP 约定、容量和内部重规划行为 |
+
+建议通过试写记录下压深度—铺毫宽度关系，以及不同速度、含墨量和纸张的影响。位置下压量不是压力值；本程序不包含力反馈、笔毛变形或墨迹仿真。工具质量与重心可用于实际控制器负载补偿。
+
+默认 `calibrated=false`。1 ms 周期、10 mm/s 书写速度、10 mm 抬笔、2 mm 最大下压量、零工具偏移及实验四的关节限制都是**未标定示例**。把 `calibrated` 改为 1 只更改标记，不会自动完成物理标定。
+
+## 命令行与手动 Simulink
+
+```matlab
+cfg = calligraphy_config('永');
+% 或 cfg = calligraphy_load_config('my_config.json');
+result = plan_calligraphy(cfg);
+folder = export_calligraphy(result);
+```
+
+也可以运行 `run_calligraphy.m`，它只生成并导出轨迹，不启动仿真。
+
+按用户要求，开发验证不运行 Simulink。你需要时自行执行：
+
+```matlab
+prepare_calligraphy_simulink(result)
+% 或从保存结果加载：
+% prepare_calligraphy_simulink(fullfile(folder,'calligraphy_trajectory.mat'))
+```
+
+该函数向 base workspace 写入 `t、q、qd、qdd`，打开实验四原有 `HL0905_2.slx`，设置终止时间、第一轴输入滤波和 `SimMechanicsOpenEditorOnUpdate=on`，并在内存中改为绝对 STL 路径。**不调用 sim，不更新/启动仿真，不保存原模型**；随后由你在 Simulink 中点击 Run，Mechanics Explorer 会自动打开。原模型显示机械臂，未新增毛笔接触动力学。界面内“准备 Simulink”按钮执行同一操作。
+
+## 验证与来源
+
+```matlab
+addpath('tests')
+run_calligraphy_tests
+```
+
+测试包括三个验收字的默认 1 ms 轨迹、限制和回代、TXT 格式、非水平纸面和非零 TCP、深度无过冲与速度不变性、错误输入、配置保存重载及界面表格回调。不运行 Simulink。
+
+首版离线验证记录见 `tests/test_report.json`、`tests/final_validation.log`；真实鼠标拖动记录见 `tests/manual_ui_checks.md`，界面截图见 `tests/editor_preview.png`。以下为首版逐段起停的历史数据，连续版本不使用这些旧轨迹：
+
+| 默认示例 | 点数（1 ms） | 总时长 |
+|---|---:|---:|
+| 一 | 19,634 | 19.633 s |
+| 人 | 38,456 | 38.455 s |
+| 永 | 102,154 | 102.153 s |
+
+三个示例均通过离散关节限位、速度、加速度和正解回代检查。最大笔尖正解回代误差小于 1e-12 mm，表示数值运动学一致性，不代表机械臂实际定位或书写精度。最后一轮只更改了界面状态读取，复用了已生成轨迹并重新验证数据和界面，未重复生成这些相同的机械臂轨迹。
+
+上一版整笔统一时间缩放的验证报告为 `tests/continuous_test_report.json`，其历史时长为一 16.573 s、人 32.030 s、永 306.783 s，使用的是当时的参数；不应与不同速度设置下的新结果直接比较。当前局部调速版本运行 `addpath('tests'); test_local_timing`，报告见 `tests/local_timing_report.json`。它检查五次时间节点速度/加速度衔接、笔内无零速、真实位置差分与解析速度一致、末端/关节约束、倾斜纸面和工具偏置、较大提按及 App 生成入口。测试和 App 均直接覆盖 `results/Uxxxxx/` 的同字结果；测试没有启动 Simulink。报告中的旧版对照使用同一配置，重现整笔统一笛卡尔限速，未计入额外关节限速，因此仅作为旧方法时长的保守对照。
+
+本轮已通过上述局部规划测试：当前参数下，一 6.129 s、人 15.245 s、永 41.573 s。局部规划为加速度留有裕量，因此简单、短小笔画不保证比旧方法更快。`tests/test_time_envelope.m` 另行验证长直线能够达到指定巡航速度，以及局部超限修正只降低附近速度包络、远处保持原巡航速度。重规划上限由 `maxTimeScalingIterations` 控制，默认 12 次。
+
+共享加速度更新按用户要求仅做“人”的必要验证：同配置时间节点由 1529 减少到 360，329 个节点采用非零加速度；关节离散 jerk 的整体 RMS 从约 5.091 降至 0.746 deg/s³，时长由 15.245 s 变为 15.247 s。轨迹通过末端/关节限制、节点连接及提按检查，没有运行仿真。对比数据在 `tests/shared_acceleration_person.mat`，图在 `tests/shared_acceleration_preview.png`。其他汉字需重新生成后使用新时间律。
+
+逆运动学加速：书写规划跳过未选中候选解的正运动学回代，仍对每个采样点最终选中的解执行完整 TCP 位置/姿态回代；限位、奇异和分支连续性检查保持有效。固定运动学模型与工具变换在逐点循环外准备。`Ikine6s(T,config)` 保持默认全候选验证行为；新增第三参数 `false` 表示跳过候选回代，对应误差字段为 NaN，`info.candidatesVerified=false`。调用快速接口时须在外层验证选中解，`calligraphy_ik` 已执行该验证。对照测试入口 `addpath('tests'); test_ik_optimization`，实测数据在 `tests/ik_optimization_report.json`。此优化不改变轨迹、插补周期和运动时长。
+
+`robot/` 中五个运动学文件来自实验四，其中本目录的 `Ikine6s.m` 增加了上述可选快速接口；实验四原目录文件未修改。字库完整副本及许可证在 `data/`，固定提交和 SHA-256 见 `data/source.json`。来源：<https://github.com/bovacu/hazi_custom_stroke_data>，遵循所附 Arphic Public License。代码不依赖联网读取字库，不需要 Robotics Toolbox 或 Image Processing Toolbox；Simulink/Simscape 仅在你手动准备和运行原模型时需要。
