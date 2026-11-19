@@ -1,0 +1,2 @@
+# calligraphy-manipulator
+matlab规划六轴机械臂控制末端毛笔进行楷书书写
